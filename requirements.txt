@@ -1,0 +1,24 @@
+#python版本3.8.10
+
+# Deep Learning
+tensorflow==2.10.0
+keras==2.10.0
+
+# Numerical Computing
+numpy==1.24.4
+scipy==1.10.1
+
+# GPU Computing
+cupy-cuda11x==12.3.0
+
+# Visualization
+matplotlib==3.7.5
+
+# TensorBoard
+tensorboard==2.10.1
+
+# HDF5 Model Save/Load
+h5py==3.11.0
+
+# Utility
+protobuf==3.19.6
