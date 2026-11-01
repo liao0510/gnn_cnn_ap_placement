@@ -1,5 +1,6 @@
 """Independent experiment directories and model configuration snapshots."""
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -29,7 +30,8 @@ def create_run(model_dir, prefix, model_filename, settings, radio_settings):
             break
         except FileExistsError:
             continue
-    metadata = {'schema_version': 2, 'environment_version': settings['ENVIRONMENT_VERSION'], 'run_id': run_dir.name,
+    metadata = {'schema_version': 2, 'environment_version': settings['ENVIRONMENT_VERSION'],
+                'model_architecture': settings['MODEL_ARCHITECTURE'], 'run_id': run_dir.name,
                 'created_at': created.isoformat(), 'timezone': 'Asia/Taipei',
                 'training': settings, 'radio': radio_settings,
                 'artifacts': {'model': model_filename, 'history': 'training_history.npz',
@@ -47,6 +49,27 @@ def save_model(model, path):
     model.save(str(path))
 
 
+def save_best_model(model, run_dir, filename, validation):
+    """Atomically replace only this fresh run's designated best checkpoint."""
+    run_dir = Path(run_dir)
+    with (run_dir / 'config.json').open(encoding='utf-8') as stream:
+        metadata = json.load(stream)
+    if (Path(filename).name != filename or not filename.endswith('.keras')
+            or filename == metadata['artifacts']['model']):
+        raise ValueError('BEST_MODEL_FILENAME must be a distinct .keras filename')
+    temporary = run_dir / f'.best_{uuid4().hex}.keras'
+    save_model(model, temporary)
+    os.replace(str(temporary), str(run_dir / filename))
+    metadata['artifacts']['best_model'] = filename
+    metadata['artifacts']['validation_history'] = 'validation_history.json'
+    metadata['artifacts']['validation_scenarios'] = 'validation_scenarios.json'
+    metadata['best_validation'] = validation
+    temporary_metadata = run_dir / f'.config_{uuid4().hex}.json'
+    with temporary_metadata.open('x', encoding='utf-8') as stream:
+        json.dump(metadata, stream, indent=2, ensure_ascii=False, allow_nan=False)
+    os.replace(str(temporary_metadata), str(run_dir / 'config.json'))
+
+
 def model_snapshot(model_path):
     """Read the snapshot for a final model or an intermediate checkpoint."""
     path = Path(model_path)
@@ -58,22 +81,33 @@ def model_snapshot(model_path):
     return None
 
 
+def validate_model_snapshot(snapshot):
+    """Reject old weights before building a structurally different network."""
+    if snapshot is None or snapshot.get('environment_version') != config.ENVIRONMENT_VERSION:
+        raise ValueError('Model environment is incompatible; train a new AP mesh/OFDMA model')
+    if snapshot.get('model_architecture') != config.MODEL_ARCHITECTURE:
+        found = snapshot.get('model_architecture', 'legacy CNN')
+        raise ValueError(f'Model architecture {found} is incompatible with {config.MODEL_ARCHITECTURE}; '
+                         'retrain using GNN_CNN_DRL_train.py. Existing model files are retained.')
+
+
 def latest_model(model_dir):
-    """Select completed models for this environment only."""
+    """Latest completed compatible run: prefer its best validation checkpoint."""
     root = project_path(model_dir)
     candidates = []
     for metadata in root.glob('*/config.json'):
         try:
             with metadata.open(encoding='utf-8') as stream:
                 settings = json.load(stream)
-            if settings.get('environment_version') != config.ENVIRONMENT_VERSION:
-                continue
+            validate_model_snapshot(settings)
             model = metadata.parent/settings['artifacts']['model']
         except (OSError, ValueError, KeyError, TypeError):
             # A new/interrupted run may not have a complete snapshot yet.
             continue
         if model.is_file():
-            candidates.append((model.stat().st_mtime_ns, str(model), model))
+            best = metadata.parent / settings['artifacts'].get('best_model', model.name)
+            candidates.append((model.stat().st_mtime_ns, str(model), best if best.is_file() else model))
     if candidates:
         return max(candidates)[2]
-    raise FileNotFoundError(f'No completed {config.ENVIRONMENT_VERSION} model in {root}; train a new model')
+    raise FileNotFoundError(f'No completed {config.MODEL_ARCHITECTURE} model in {root}; '
+                            'retrain using GNN_CNN_DRL_train.py for the new CNN architecture')

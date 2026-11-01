@@ -4,6 +4,7 @@ import sys
 import numpy as np
 import tensorflow as tf
 import config
+from training_method.Deployment import json_safe
 import config_radio as radio
 from method.Cal_average_gpu import Cal_db_gpu
 from method.Cal_SNR import as_numpy
@@ -14,24 +15,10 @@ from training_method.Network_environment import run_network_environment
 from training_method.Network_state import build_state, CNN_CHANNELS, NODE_FEATURES
 from training_method.Network_reward import (mesh_rssi_map, coverage_score, calculate_reward,
                                             new_ap_connected_to_mesh)
-from training_method.Experiment import latest_model, model_snapshot, project_path
+from training_method.Experiment import latest_model, model_snapshot, project_path, validate_model_snapshot
 
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(errors='replace')
-
-
-def json_safe(value):
-    if isinstance(value, dict):
-        return {str(key): json_safe(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [json_safe(item) for item in value]
-    if isinstance(value, np.ndarray) or hasattr(value, 'get'):
-        return json_safe(as_numpy(value).tolist())
-    if isinstance(value, np.generic):
-        return json_safe(value.item())
-    if isinstance(value, float) and not np.isfinite(value):
-        return None
-    return value
 
 
 def run_prediction(model_path=None):
@@ -47,8 +34,7 @@ def run_prediction(model_path=None):
     if not model_path.is_file():
         raise FileNotFoundError(model_path)
     saved = model_snapshot(model_path)
-    if saved is None or saved.get('environment_version') != config.ENVIRONMENT_VERSION:
-        raise ValueError('Model environment is incompatible; train a new AP mesh/OFDMA model')
+    validate_model_snapshot(saved)
     radio_settings = saved['radio']
     training_settings = saved['training']
     reward_settings = {key: training_settings[key] for key in config.reward_settings()}
@@ -138,13 +124,14 @@ def run_prediction(model_path=None):
         print(f'AP {step + 1}/{ap_count}: {position}, edges={len(net["mesh_edges"])}, '
               f'coverage={coverage:.1%}, conn={parts["connectivity"]:.0f}, reward={reward:.4f}')
     report = json_safe({'environment_version': config.ENVIRONMENT_VERSION,
+                       'model_architecture': saved['model_architecture'],
                        'model_path': str(model_path), 'map_path': str(map_path),
                        'seed': settings['PREDICT_RANDOM_SEED'], 'training_run_id': saved['run_id'],
                        'ap_positions': aps, 'client_positions': clients, 'client_demands': demands,
                        'initial_coverage': initial_coverage, 'coverage': coverage,
                        'coverage_threshold_dbm': threshold, 'radio_config': radio_settings,
                        'assumptions': {'serving_mesh': 'largest_connected_component',
-                                       'connectivity_reward': 'new_ap_connected_to_previous_serving_mesh',
+                                       'connectivity_reward': 'first_ap_is_mesh_seed_else_join_previous_serving_mesh',
                                        'noise_limited': True, 'constant_power_spectral_density': True,
                                        'ofdma_scheduler': radio_settings['OFDMA_SCHEDULER'],
                                        'equal_ru_sizes': True, 'demand_reclaims_idle_rus': False},

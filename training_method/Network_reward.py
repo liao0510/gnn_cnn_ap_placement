@@ -6,16 +6,19 @@ from method.Cal_SNR import as_numpy
 
 
 def new_ap_connected_to_mesh(mesh_adjacency, previous_in_mesh):
-    """Whether the appended AP links to the serving mesh BEFORE placement.
+    """Whether the AP starts a mesh or links to the mesh BEFORE placement.
 
-    The first AP earns no connection bonus. Linking only to an isolated group
-    also earns none, even if that group becomes the new largest component.
+    The first AP is a valid one-node mesh and earns the full connection bonus.
+    Later APs must link to the previous serving mesh. Linking only to an isolated
+    group earns none, even if that group becomes the new largest component.
     """
     adjacency = np.asarray(mesh_adjacency)
     members = np.asarray(previous_in_mesh, dtype=bool)
     count = len(members) + 1
     if members.ndim != 1 or adjacency.shape != (count, count):
         raise ValueError('Provide the new adjacency and the previous AP mesh membership')
+    if count == 1:
+        return True
     return bool(np.any((adjacency[-1, :-1] > 0) & members))
 
 

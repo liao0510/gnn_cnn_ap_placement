@@ -1,5 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras import layers, models
+from training_method.Spatial_CNN import build_spatial_encoder, BroadcastGraph
 
 
 def build_network(cnn_channels=6, node_features=13):
@@ -8,11 +9,7 @@ def build_network(cnn_channels=6, node_features=13):
     adjacency_input = layers.Input((None, None), name='adjacency_input')
     node_mask_input = layers.Input((None,), name='node_mask_input')
 
-    x = layers.Conv2D(64, 3, padding='same', activation='relu')(map_input)
-    x = layers.BatchNormalization()(x)
-    x = layers.Conv2D(128, 3, padding='same', activation='relu', dilation_rate=2)(x)
-    x = layers.BatchNormalization()(x)
-    cnn_feature = layers.Conv2D(128, 3, padding='same', activation='relu', dilation_rate=4)(x)
+    cnn_feature = build_spatial_encoder(map_input)
 
     # Simple GCN-style message passing. A is normalized by Network_state.
     g = layers.Dense(64, activation='relu')(node_input)
@@ -28,15 +25,12 @@ def build_network(cnn_channels=6, node_features=13):
     graph_feature = layers.Lambda(lambda z: z[0] / z[1])([graph_sum, node_count])
     graph_feature = layers.Dense(128, activation='relu')(graph_feature)
 
-    def broadcast_graph(z):
-        cnn, graph = z
-        shape = tf.shape(cnn)
-        graph = tf.reshape(graph, [-1, 1, 1, 128])
-        return tf.tile(graph, [1, shape[1], shape[2], 1])
-
-    graph_spatial = layers.Lambda(broadcast_graph)([cnn_feature, graph_feature])
-    fused = layers.Concatenate()([cnn_feature, graph_spatial])
-    fused = layers.Conv2D(128, 3, padding='same', activation='relu')(fused)
+    # Preserve GNN message passing and global pooling. Only project its spatial
+    # copy, avoiding the old full-resolution 128+128 channel concatenation.
+    graph_compact = layers.Dense(16, activation='relu', name='graph_spatial_projection')(graph_feature)
+    graph_spatial = BroadcastGraph(name='graph_spatial')([cnn_feature, graph_compact])
+    fused = layers.Concatenate(name='spatial_graph_fusion')([cnn_feature, graph_spatial])
+    fused = layers.Conv2D(32, 3, padding='same', activation='relu', name='fused_features')(fused)
 
     logits = layers.Conv2D(1, 1, padding='same')(fused)
     def spatial_softmax(t):
@@ -54,8 +48,9 @@ def build_network(cnn_channels=6, node_features=13):
     v = layers.Dense(128, activation='relu')(v)
     v = layers.Dense(64, activation='relu')(v)
     critic = layers.Dense(1, name='critic')(v)
-    return models.Model([map_input, node_input, adjacency_input, node_mask_input], [actor, critic])
+    return models.Model([map_input, node_input, adjacency_input, node_mask_input], [actor, critic],
+                        name='GNN_CNN_multiscale_actor_critic')
 
 if __name__ == "__main__":
-    model = build_network(7,13)
+    model = build_network(6,13)
     model.summary()
