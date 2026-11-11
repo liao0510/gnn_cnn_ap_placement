@@ -1,4 +1,4 @@
-"""SNR -> assumed MCS threshold -> HE rate at the allocated RU size.
+"""Access SINR -> assumed MCS threshold -> HE rate at the allocated RU size.
 
 Thresholds approximate receiver performance, rather than normative PER curves.
 Rates use HE data subcarriers and a 12.8 us symbol plus the guard interval.
@@ -6,7 +6,7 @@ Rates use HE data subcarriers and a 12.8 us symbol plus the guard interval.
 import math
 import config_radio as radio
 
-# MCS, constellation bits, coding rate, assumed minimum SNR (dB).
+# MCS, constellation bits, coding rate, assumed minimum equivalent SINR (dB).
 MCS_TABLE = (
     (0, 1, 1/2, 4), (1, 2, 1/2, 7), (2, 2, 3/4, 10),
     (3, 4, 1/2, 13), (4, 4, 3/4, 16), (5, 6, 2/3, 20),
@@ -25,7 +25,7 @@ RU_LAYOUTS = {
 }
 
 
-def calculate_link_capacity(snr_db, mac_efficiency=None, *, ru_tones=None,
+def calculate_link_capacity(sinr_db, mac_efficiency=None, *, ru_tones=None,
                             bandwidth_mhz=None, spatial_streams=None,
                             guard_interval_us=None):
     efficiency = radio.MAC_EFFICIENCY if mac_efficiency is None else mac_efficiency
@@ -42,8 +42,8 @@ def calculate_link_capacity(snr_db, mac_efficiency=None, *, ru_tones=None,
     if tones not in RU_LAYOUTS[bandwidth]:
         raise ValueError('RU does not fit the selected channel bandwidth')
     selected = None
-    if snr_db is not None and snr_db is not False and math.isfinite(float(snr_db)):
-        selected = next((row for row in reversed(MCS_TABLE) if float(snr_db) >= row[3]), None)
+    if sinr_db is not None and sinr_db is not False and math.isfinite(float(sinr_db)):
+        selected = next((row for row in reversed(MCS_TABLE) if float(sinr_db) >= row[3]), None)
     phy_rate = 0.0 if selected is None else (
         RU_DATA_SUBCARRIERS[tones] * selected[1] * selected[2] * streams / (12.8 + gi))
     return {'mcs': None if selected is None else selected[0], 'ru_tones': tones,

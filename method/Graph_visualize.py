@@ -1,4 +1,4 @@
-"""AP/client mesh, SNR links and OFDMA results."""
+"""AP-AP reference SNR mesh, AP-client SINR and OFDMA results."""
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
@@ -96,15 +96,18 @@ def plot_prediction_results(walls, forbidden, rssi_map, report, output_dir=None,
         ])
     details.extend(['', 'CLIENT DETAILS (actual throughput / demand, Mbps)'])
     for client, row in enumerate(net['allocation_results']):
-        snr = number(row['snr_db'])
+        sinr = number(row['sinr_db'])
         details.extend([
             f'C{client} {tuple(clients[client])} -> {ap_label(row["ap"])} | '
-            f'SNR {snr} dB | MCS {row["mcs"] if row["mcs"] is not None else "-"}',
+            f'SINR {sinr} dB | MCS {row["mcs"] if row["mcs"] is not None else "-"}',
             f'  RU {row["ru_tones"]} | time {row["time_fraction"]:.0%} | '
             f'{row["throughput_mbps"]:.1f}/{row["demand_mbps"]:.1f} Mbps | '
             f'sat {row["satisfaction_ratio"]:.1%}',
+            f'  RSSI {number(row.get("rssi_dbm"))} dBm | '
+            f'I {number(row.get("interference_dbm"))} dBm | '
+            f'N {number(row.get("noise_dbm"))} dBm',
         ])
-    details.extend(['', 'AP-AP LINKS (both directions)'])
+    details.extend(['', 'AP-AP SNR LINKS (both directions)'])
     for edge in net['mesh_edges']:
         details.append(f'AP{edge["ap_a"]} <-> AP{edge["ap_b"]}: '
                        f'{edge["snr_a_to_b_db"]:.1f} / {edge["snr_b_to_a_db"]:.1f} dB')
@@ -135,7 +138,7 @@ def plot_prediction_results(walls, forbidden, rssi_map, report, output_dir=None,
         colorbar = fig.colorbar(heat, ax=ax, orientation='horizontal', pad=0.06, shrink=0.85)
         colorbar.set_label('Serving mesh RSSI (dBm)', color='white')
         colorbar.ax.tick_params(colors='white')
-        ax.set_title('AP mesh and client associations | white lines = active links', color='white')
+        ax.set_title('AP-AP SNR mesh / AP-client SINR | white lines = links', color='white')
         for edge_index, edge in enumerate(net['mesh_edges']):
             x1, y1 = aps[edge['ap_a']]
             x2, y2 = aps[edge['ap_b']]
@@ -160,7 +163,7 @@ def plot_prediction_results(walls, forbidden, rssi_map, report, output_dir=None,
                 ax.plot([x, px], [y, py], '--', color='white', linewidth=1.15,
                          path_effects=line_effect, zorder=2)
                 fraction = 0.35 + 0.12 * (client % 4)
-                ax.annotate(f'C{client}: {row["snr_db"]:.1f} dB\n{row["throughput_mbps"]:.1f} Mbps',
+                ax.annotate(f'C{client}: SINR {row["sinr_db"]:.1f} dB\n{row["throughput_mbps"]:.1f} Mbps',
                              (x + fraction * (px - x), y + fraction * (py - y)),
                              xytext=(9 if client % 2 == 0 else -9, 0), textcoords='offset points',
                              fontsize=7, color='white', ha='center', va='center', bbox=text_box, zorder=3)
@@ -235,13 +238,13 @@ def plot_prediction_results(walls, forbidden, rssi_map, report, output_dir=None,
                      'Concurrent', 'Throughput\n(Mbps)'], 'AP resource allocation', 'ap_details')
     client_rows = []
     for client, row in enumerate(net['allocation_results']):
-        client_rows.append([f'C{client}', ap_label(row['ap']), number(row['snr_db']),
+        client_rows.append([f'C{client}', ap_label(row['ap']), number(row['sinr_db']),
                             row['mcs'], row['ru_tones'], f'{row["time_fraction"]:.1%}',
                             number(row['demand_mbps']), number(row['throughput_mbps']),
                             f'{row["satisfaction_ratio"]:.1%}'])
-    tables(client_rows, ['Client', 'AP', 'SNR (dB)', 'MCS', 'RU tones', 'Time share',
+    tables(client_rows, ['Client', 'AP', 'SINR (dB)', 'MCS', 'RU tones', 'Time share',
                          'Demand\n(Mbps)', 'Throughput\n(Mbps)', 'Satisfaction'],
-           'Client SNR and OFDMA allocation', 'client_details')
+           'Client SINR and OFDMA allocation', 'client_details')
     mesh_rows = [[edge['ap_a'], edge['ap_b'], number(edge['snr_a_to_b_db']),
                   number(edge['snr_b_to_a_db'])] for edge in net['mesh_edges']]
     tables(mesh_rows, ['AP A', 'AP B', 'A to B SNR (dB)', 'B to A SNR (dB)'],
@@ -432,7 +435,7 @@ def plot_batch_prediction_analysis(trials, summary, output_dir, show=False):
     for ax, (key, label, percentage) in zip(axes, (
             ('throughput_mbps', 'Client actual throughput (Mbps)', False),
             ('satisfaction_ratio', 'Client throughput / demand', True),
-            ('snr_db', 'Associated-client SNR (dB)', False))):
+            ('sinr_db', 'Associated-client SINR (dB)', False))):
         for method in methods:
             data = [row[key] for trial in trials for row in trial[method]['allocation_results']
                     if row[key] is not None]
@@ -445,6 +448,6 @@ def plot_batch_prediction_analysis(trials, summary, output_dir, show=False):
         else:
             ax.text(0.5, 0.5, 'No clients / valid samples', ha='center', transform=ax.transAxes)
         ax.grid(True, alpha=0.22)
-    fig.suptitle('Pooled client ECDFs | throughput includes unassociated zeros; SNR excludes unassociated clients')
+    fig.suptitle('Pooled client ECDFs | throughput includes unassociated zeros; SINR excludes unassociated clients')
     finish(fig, 'client_distributions')
     return saved

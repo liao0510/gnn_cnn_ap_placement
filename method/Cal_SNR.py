@@ -1,4 +1,4 @@
-"""SNR links, complete threshold mesh, and strongest-SNR association."""
+"""AP-AP reference SNR mesh and strongest-SINR AP-client association."""
 import numpy as np
 from config_radio import ChannelConfig
 
@@ -55,22 +55,45 @@ def build_ap_mesh(ap_positions, rssi_maps, cfg):
 
 
 def inspect_client_links(client_positions, ap_positions, rssi_maps, in_mesh, cfg):
+    """Reevaluate every candidate after each placement using all deployed APs.
+
+    Each candidate is the desired transmitter; every OTHER AP is an always-on,
+    full-band co-channel interferer, including APs outside the serving mesh and
+    APs with no clients. Mesh membership controls association eligibility only.
+    Input powers are per-AP received dBm at the CLIENT, before display clipping.
+    Sum other powers directly in float64 (never subtract desired from a rounded
+    total, which loses weak interference next to a very strong desired signal).
+    """
     if not len(ap_positions) == len(rssi_maps) == len(in_mesh):
         raise ValueError('AP positions, RSSI maps and mesh membership must align')
     noise = calculate_noise_dbm(cfg)
-    results, associated, selected_snr = [], [], []
+    noise_mw = 10.0 ** (noise / 10.0)
+    results, associated, selected_sinr = [], [], []
     for client_id, (x, y) in enumerate(client_positions):
-        links, best_ap, best_snr = [], -1, -np.inf
-        for ap_id, signal in enumerate(rssi_maps):
-            rssi = float(signal[y, x])
-            snr = rssi - noise
-            valid = bool(in_mesh[ap_id] and np.isfinite(snr)
-                         and snr >= cfg.client_snr_threshold_db)
-            links.append({'ap': ap_id, 'rssi_dbm': rssi, 'snr_db': snr,
+        received_dbm = np.asarray([signal[y, x] for signal in rssi_maps], dtype=np.float64)
+        finite = np.isfinite(received_dbm)
+        powers_mw = np.zeros(len(ap_positions), dtype=np.float64)
+        powers_mw[finite] = np.power(10.0, received_dbm[finite] / 10.0)
+        if not np.all(np.isfinite(powers_mw)):
+            raise ValueError('Received access powers must have finite linear representations')
+        links, best_ap, best_sinr = [], -1, -np.inf
+        for ap_id, rssi in enumerate(received_dbm):
+            other = np.arange(len(ap_positions)) != ap_id
+            interference = float(powers_mw[other].sum())
+            denominator_dbm = float(10.0 * np.log10(noise_mw + interference))
+            sinr = float(rssi - denominator_dbm) if finite[ap_id] else None
+            valid = bool(in_mesh[ap_id] and sinr is not None
+                         and sinr >= cfg.client_sinr_threshold_db)
+            links.append({'ap': ap_id, 'rssi_dbm': float(rssi), 'sinr_db': sinr,
+                          'noise_dbm': float(noise), 'interference_mw': interference,
+                          'interference_dbm': (float(10.0 * np.log10(interference))
+                                               if interference > 0 else None),
+                          'noise_interference_dbm': denominator_dbm,
+                          'interfering_aps': np.flatnonzero(other & (powers_mw > 0)).tolist(),
                           'in_mesh': bool(in_mesh[ap_id]), 'link_valid': valid})
-            if valid and snr > best_snr:
-                best_ap, best_snr = ap_id, snr
+            if valid and sinr > best_sinr:
+                best_ap, best_sinr = ap_id, sinr
         results.append({'client': client_id, 'position': (x, y), 'links': links})
         associated.append(best_ap)
-        selected_snr.append(None if best_ap < 0 else best_snr)
-    return results, associated, selected_snr
+        selected_sinr.append(None if best_ap < 0 else best_sinr)
+    return results, associated, selected_sinr

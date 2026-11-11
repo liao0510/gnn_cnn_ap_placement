@@ -1,4 +1,4 @@
-"""AP/client SNR and OFDMA demonstration with topology and detailed plots."""
+"""AP-AP SNR / AP-client SINR and OFDMA demonstration with detailed plots."""
 import json
 import argparse
 from pathlib import Path
@@ -26,7 +26,9 @@ def main(map_path=None, output_dir=None, show=True):
     print('Mesh edges:', net['mesh_edges'])
     for row in net['allocation_results']:
         ap_label = f'AP{row["ap"]}' if row['ap'] >= 0 else 'Unassociated'
-        print(f'C{row["client"]} -> {ap_label}, SNR={row["snr_db"]:.2f}, '
+        sinr = '-' if row['sinr_db'] is None else f'{row["sinr_db"]:.2f}'
+        interference = '-' if row['interference_dbm'] is None else f'{row["interference_dbm"]:.2f}'
+        print(f'C{row["client"]} -> {ap_label}, SINR={sinr} dB, I={interference} dBm, '
               f'RU={row["ru_tones"]}, throughput={row["throughput_mbps"]:.2f} Mbps')
     total_rssi = mesh_rssi_map(maps, net['in_mesh'], walls.shape)
     coverage = coverage_score(total_rssi, radio.COVERAGE_THRESHOLD_DBM, walls == 0)

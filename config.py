@@ -1,10 +1,10 @@
 """AP/client placement settings. Physical and OFDMA settings: config_radio.py."""
-ENVIRONMENT_VERSION = 'ap_mesh_snr_ofdma_v1'
-MODEL_ARCHITECTURE = 'gnn_cnn_multiscale_v2'
+ENVIRONMENT_VERSION = 'ap_mesh_snr_access_sinr_ofdma_v2'
+MODEL_ARCHITECTURE = 'gnn_cnn_client_ap_attention_v4'
 MAP_DIR = 'maps_200_200'
 EPISODES = 2000
-LR = 0.0001                     # PPO 的 Adam learning rate。
-GAMMA = 0.99                    # 折扣率：越接近 1，越重視後續 AP 的 reward。
+LR = 0.0003                     # PPO 的 Adam learning rate。
+GAMMA = 0.85                    # 折扣率：越接近 1，越重視後續 AP 的 reward。
 N_CLIENT = 10
 AP_AMOUNT = 5                    # Total APs, all placed by the policy.
 CLIENT_DEMAND = 100.0
@@ -35,8 +35,11 @@ BEST_MODEL_FILENAME = 'best_model.keras'
 COVERAGE_REWARD_WEIGHT = 0.2
 THROUGHPUT_REWARD_WEIGHT = 0.7
 CONNECTIVITY_REWARD_WEIGHT = 0.1
-COVERAGE_GAIN_SCALE = 0.25
-THROUGHPUT_GAIN_SCALE = 0.25
+COVERAGE_GAIN_SCALE = 1.0        # 直接使用 coverage 比例增量；不再於 +25% 時飽和。
+THROUGHPUT_GAIN_SCALE = 1.0      # 直接使用達成率增量；仍保留正負號與原本 conn/gamma。
+# 需求熱圖是輸入特徵，不改變原始 demand、AP-client SINR 或 RU 分配。
+CLIENT_DENSITY_SIGMAS_METERS = (1.0, 3.0)  # 局部／較大範圍的 Gaussian 需求密度。
+CLIENT_DENSITY_REFERENCE_MBPS = 100.0      # 熱圖用 density/(density+reference) 壓至 [0,1)。
 MODEL_DIR = 'model'
 RUN_PREFIX = 'AP_MESH_OFDMA'
 MODEL_FILENAME = 'model.keras'
@@ -45,7 +48,7 @@ SHOW_TRAINING_PLOTS = False
 PRINT_MODEL_SUMMARY = True
 RSSI_RAY_STEPS = 128
 RSSI_ROW_CHUNK = 16
-PREDICT_MODEL_PATH = None        # None: 最新完成訓練的 best model；舊訓練無 best 時用 final。
+PREDICT_MODEL_PATH = None        # 最新完成且環境/架構相容的 best model；SINR 新環境需重新訓練。
 PREDICT_MAP_PATH = 'maps_200_200/map_0000.json'
 PREDICT_AP_COUNT = 5
 PREDICT_CLIENT_COUNT = 10

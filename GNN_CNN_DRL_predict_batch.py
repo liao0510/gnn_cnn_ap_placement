@@ -98,6 +98,12 @@ def run_batch_predictions():
         'ap_count': AP_COUNT, 'client_count': CLIENT_COUNT, 'client_demands_mbps': demands,
         'seed_entropy': seed_sequence.entropy, 'bootstrap_samples': BOOTSTRAP_SAMPLES,
         'radio': radio_settings, 'training_snapshot': training_settings,
+        'assumptions': {'mesh_link_metric': 'SNR', 'access_link_metric': 'SINR',
+                        'access_interference_model': radio_settings['ACCESS_INTERFERENCE_MODEL'],
+                        'all_deployed_aps_always_transmit': True,
+                        'interferers_include_nonserving_mesh_aps': True,
+                        'sinr_independent_of_ru_position': True,
+                        'constant_power_spectral_density': True},
         'methods': {'gnn_cnn': 'sequential masked argmax, same as single predict',
                     'random': 'uniform legal AP placement without replacement; no mesh constraint'},
         'paired_design': 'identical map, clients, demands, AP budget, radio and OFDMA per trial',
@@ -138,7 +144,8 @@ def run_batch_predictions():
                 trial[method] = evaluate_deployment(walls, forbidden, clients, demands, AP_COUNT,
                     simulator, cfg, radio_settings, config.MAX_NODES,
                     policy=policy if method == 'gnn_cnn' else None,
-                    rng=baseline_rng if method == 'random' else None)
+                    rng=baseline_rng if method == 'random' else None,
+                    feature_settings=training_settings)
             trials.append(trial)
             stream.write(json.dumps(json_safe(trial), ensure_ascii=False, allow_nan=False) + '\n')
             stream.flush()

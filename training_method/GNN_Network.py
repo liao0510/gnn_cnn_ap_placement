@@ -3,9 +3,10 @@ import tensorflow as tf
 from tensorflow.keras import layers, models
 from training_method.Ablation_layers import (
     MapOnly, NeighborAggregation, MaskedMean, CoordinateQueries, SpatialSoftmax)
+from training_method.Network_state import CNN_CHANNELS, NODE_FEATURES
 
 
-def build_network(cnn_channels=6, node_features=13):
+def build_network(cnn_channels=CNN_CHANNELS, node_features=NODE_FEATURES):
     map_input = layers.Input((None, None, cnn_channels), name='map_input')
     node_input = layers.Input((None, node_features), name='node_input')
     adjacency_input = layers.Input((None, None), name='adjacency_input')

@@ -37,7 +37,8 @@ def read_floorplan(path, required_positions):
 
 
 def evaluate_deployment(walls, forbidden, clients, demands, ap_count, simulator,
-                        cfg, radio_settings, max_nodes, policy=None, rng=None):
+                        cfg, radio_settings, max_nodes, policy=None, rng=None,
+                        feature_settings=None):
     """Same argmax policy and physical environment as the single predictor.
 
     With policy=None, place APs uniformly without replacement using the same
@@ -56,7 +57,9 @@ def evaluate_deployment(walls, forbidden, clients, demands, ap_count, simulator,
             index = int(rng.choice(np.flatnonzero(available)))
         else:
             state = build_state(walls, forbidden, aps, clients, demands, total,
-                                net, step, ap_count, max_nodes)
+                                net, step, ap_count, max_nodes,
+                                feature_settings=feature_settings,
+                                grid_size_meters=radio_settings['GRID_SIZE_METERS'])
             inputs = [state[key][None] for key in ('map', 'nodes', 'adjacency', 'mask')]
             logits, _ = policy(inputs, training=False)
             log_probs = masked_log_probabilities(logits, available[None]).numpy()

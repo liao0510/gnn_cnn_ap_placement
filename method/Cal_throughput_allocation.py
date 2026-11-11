@@ -3,7 +3,8 @@
 Choose the largest homogeneous legal RU layout that fits all active clients.
 If even 26-tone RUs cannot fit everyone, rotate over the maximum disjoint slots.
 Each client gets one RU per selected TXOP. Demand caps do not reclaim idle RUs.
-SNR is unchanged across RUs under constant power spectral density / flat fading.
+Reference SINR is unchanged across RUs under full-band always-on interference,
+constant power spectral density and flat fading. RU position is not simulated.
 """
 import math
 from method.Cal_link_capacity import RU_LAYOUTS, calculate_link_capacity
@@ -22,29 +23,29 @@ def txop_allocation(resource, txop_index):
             for offset in range(slots)]
 
 
-def allocate_throughput(client_demands, connected_AP, client_snrs, ap_count, cfg,
+def allocate_throughput(client_demands, connected_AP, client_sinrs, ap_count, cfg,
                         *, mac_efficiency=None):
     count = len(client_demands)
-    if not len(connected_AP) == len(client_snrs) == count:
-        raise ValueError('Provide one association and SNR per client demand')
+    if not len(connected_AP) == len(client_sinrs) == count:
+        raise ValueError('Provide one association and SINR per client demand')
     if not isinstance(ap_count, int) or ap_count < 0:
         raise ValueError('ap_count must be a nonnegative integer')
     demands = [float(d) for d in client_demands]
     if any(not math.isfinite(d) or d < 0 for d in demands):
         raise ValueError('Client demands must be finite and nonnegative')
 
-    def capacity(snr, ru=None):
-        return calculate_link_capacity(snr, mac_efficiency, ru_tones=ru,
+    def capacity(sinr, ru=None):
+        return calculate_link_capacity(sinr, mac_efficiency, ru_tones=ru,
                                        bandwidth_mhz=cfg.bandwidth_mhz,
                                        spatial_streams=cfg.spatial_streams,
                                        guard_interval_us=cfg.guard_interval_us)
 
     results = []
-    for client, (ap, snr, demand) in enumerate(zip(connected_AP, client_snrs, demands)):
+    for client, (ap, sinr, demand) in enumerate(zip(connected_AP, client_sinrs, demands)):
         if ap is None or ap is False or not isinstance(ap, int) or not -1 <= ap < ap_count:
             raise ValueError('Client associations must use -1 or a valid integer AP ID')
-        full = capacity(snr)
-        results.append({'client': client, 'ap': ap, 'snr_db': snr,
+        full = capacity(sinr)
+        results.append({'client': client, 'ap': ap, 'sinr_db': sinr,
                         'demand_mbps': demand, 'mcs': full['mcs'],
                         'access_capacity_mbps': full['link_capacity_mbps'] if ap >= 0 else 0.0,
                         'ru_tones': 0, 'ru_capacity_mbps': 0.0, 'time_fraction': 0.0,
@@ -66,7 +67,7 @@ def allocate_throughput(client_demands, connected_AP, client_snrs, ap_count, cfg
                           for index, client in enumerate(active[:concurrent])]
         for client in active:
             row = results[client]
-            ru = capacity(row['snr_db'], tones)
+            ru = capacity(row['sinr_db'], tones)
             scheduled = ru['link_capacity_mbps'] * duty
             delivered = min(row['demand_mbps'], scheduled)
             row.update(ru_tones=tones, ru_capacity_mbps=ru['link_capacity_mbps'],

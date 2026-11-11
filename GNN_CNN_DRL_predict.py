@@ -96,7 +96,9 @@ def run_prediction(model_path=None):
     initial_coverage = coverage
     for step in range(ap_count):
         state = build_state(walls, forbidden, aps, clients, demands, total,
-                            net, step, ap_count, settings['MAX_NODES'])
+                            net, step, ap_count, settings['MAX_NODES'],
+                            feature_settings=training_settings,
+                            grid_size_meters=radio_settings['GRID_SIZE_METERS'])
         inputs = [state[key][None] for key in ('map', 'nodes', 'adjacency', 'mask')]
         available = placement_mask(walls, forbidden, aps + clients)
         logits, value = policy(inputs, training=False)
@@ -132,7 +134,13 @@ def run_prediction(model_path=None):
                        'coverage_threshold_dbm': threshold, 'radio_config': radio_settings,
                        'assumptions': {'serving_mesh': 'largest_connected_component',
                                        'connectivity_reward': 'first_ap_is_mesh_seed_else_join_previous_serving_mesh',
-                                       'noise_limited': True, 'constant_power_spectral_density': True,
+                                       'mesh_link_metric': 'SNR', 'access_link_metric': 'SINR',
+                                       'mesh_noise_limited': True,
+                                       'access_interference_model': radio_settings['ACCESS_INTERFERENCE_MODEL'],
+                                       'all_deployed_aps_always_transmit': True,
+                                       'interferers_include_nonserving_mesh_aps': True,
+                                       'sinr_independent_of_ru_position': True,
+                                       'constant_power_spectral_density': True,
                                        'ofdma_scheduler': radio_settings['OFDMA_SCHEDULER'],
                                        'equal_ru_sizes': True, 'demand_reclaims_idle_rus': False},
                        'history': history, 'network': net})

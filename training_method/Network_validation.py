@@ -61,7 +61,8 @@ def evaluate_validation(policy, manifest, settings, radio_settings):
                 ray_steps=settings['RSSI_RAY_STEPS'], row_chunk=settings['RSSI_ROW_CHUNK'])
             current_path = path
         result = evaluate_deployment(walls, forbidden, scenario['clients'], scenario['demands_mbps'],
-            settings['AP_AMOUNT'], simulator, cfg, radio_settings, settings['MAX_NODES'], policy=policy)
+            settings['AP_AMOUNT'], simulator, cfg, radio_settings, settings['MAX_NODES'], policy=policy,
+            feature_settings=settings)
         trials.append({'scenario': scenario['scenario'], **result})
     metrics = {key: (float(np.mean([row['metrics'][key] for row in trials
                                    if row['metrics'][key] is not None]))

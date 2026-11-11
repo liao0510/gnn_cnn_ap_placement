@@ -82,9 +82,10 @@ def model_snapshot(model_path):
 
 
 def validate_model_snapshot(snapshot):
-    """Reject old weights before building a structurally different network."""
+    """Reject weights from a different physical environment or architecture."""
     if snapshot is None or snapshot.get('environment_version') != config.ENVIRONMENT_VERSION:
-        raise ValueError('Model environment is incompatible; train a new AP mesh/OFDMA model')
+        raise ValueError('Model environment is incompatible with AP-AP SNR / AP-client SINR; '
+                         'retrain in the new environment. Existing model files are retained.')
     if snapshot.get('model_architecture') != config.MODEL_ARCHITECTURE:
         found = snapshot.get('model_architecture', 'legacy CNN')
         raise ValueError(f'Model architecture {found} is incompatible with {config.MODEL_ARCHITECTURE}; '
@@ -109,5 +110,6 @@ def latest_model(model_dir):
             candidates.append((model.stat().st_mtime_ns, str(model), best if best.is_file() else model))
     if candidates:
         return max(candidates)[2]
-    raise FileNotFoundError(f'No completed {config.MODEL_ARCHITECTURE} model in {root}; '
-                            'retrain using GNN_CNN_DRL_train.py for the new CNN architecture')
+    raise FileNotFoundError(f'No completed {config.MODEL_ARCHITECTURE} model for '
+                            f'{config.ENVIRONMENT_VERSION} in {root}; '
+                            'retrain using GNN_CNN_DRL_train.py in the SINR environment')

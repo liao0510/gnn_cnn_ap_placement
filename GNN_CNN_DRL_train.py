@@ -184,7 +184,8 @@ def run_training(map_dir=None, episodes=None, model_path=None, model_dir=None):
         total_rssi = mesh_rssi_map(maps, net['in_mesh'], walls.shape)
         coverage = coverage_score(total_rssi, radio_settings['COVERAGE_THRESHOLD_DBM'], coverage_mask)
         state = build_state(walls, forbidden, aps, clients, demands, total_rssi,
-                            net, 0, settings['AP_AMOUNT'], settings['MAX_NODES'])
+                            net, 0, settings['AP_AMOUNT'], settings['MAX_NODES'],
+                            feature_settings=settings, grid_size_meters=radio_settings['GRID_SIZE_METERS'])
         trajectory, records = [], []
         
         result_path = str(Path(path).parts[-2] + "\\" + Path(path).name)
@@ -204,7 +205,8 @@ def run_training(map_dir=None, episodes=None, model_path=None, model_dir=None):
             reward, parts = trainer.cal_reward(coverage, previous_coverage, net['allocation_results'],
                                                new_ap_connected, previous_allocations)
             next_state = build_state(walls, forbidden, aps, clients, demands, total_rssi,
-                                     net, step + 1, settings['AP_AMOUNT'], settings['MAX_NODES'])
+                                     net, step + 1, settings['AP_AMOUNT'], settings['MAX_NODES'],
+                                     feature_settings=settings, grid_size_meters=radio_settings['GRID_SIZE_METERS'])
             trajectory.append(PPOTransition(state, position, reward, action_mask,
                 old_log_probability, old_value, step + 1 == settings['AP_AMOUNT']))
             records.append((coverage, parts, dict(net['network_summary']), net['mesh_connectivity']))
@@ -303,8 +305,13 @@ def run_training(map_dir=None, episodes=None, model_path=None, model_dir=None):
 
 
 if __name__ == '__main__':
-    LR_list = [0.0003, 0.0001, 0.00005, 0.00003, 0.00001]
-    for i in range(len(LR_list)):
-        config.LR = LR_list[i]
+    # run_training()
+    # LR_list = [0.0003]
+    # for i in range(len(LR_list)):
+    #     config.LR = LR_list[i]
+    #     run_training()
+    gamma_list = [0.995,0.99,0.95,0.9,0.85]
+    for i in range(len(gamma_list)):
+        config.GAMMA = gamma_list[i]
         run_training()
     

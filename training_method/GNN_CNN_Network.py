@@ -1,9 +1,12 @@
 import tensorflow as tf
 from tensorflow.keras import layers, models
 from training_method.Spatial_CNN import build_spatial_encoder, BroadcastGraph
+from training_method.Client_attention import SpatialClientAttention
+from training_method.AP_attention import SpatialAPAttention
+from training_method.Network_state import CNN_CHANNELS, NODE_FEATURES
 
 
-def build_network(cnn_channels=6, node_features=13):
+def build_network(cnn_channels=CNN_CHANNELS, node_features=NODE_FEATURES):
     map_input = layers.Input((None, None, cnn_channels), name='map_input')
     node_input = layers.Input((None, node_features), name='node_input')
     adjacency_input = layers.Input((None, None), name='adjacency_input')
@@ -25,11 +28,15 @@ def build_network(cnn_channels=6, node_features=13):
     graph_feature = layers.Lambda(lambda z: z[0] / z[1])([graph_sum, node_count])
     graph_feature = layers.Dense(128, activation='relu')(graph_feature)
 
-    # Preserve GNN message passing and global pooling. Only project its spatial
-    # copy, avoiding the old full-resolution 128+128 channel concatenation.
+    # Preserve global context, and add a spatially aligned per-client path.
     graph_compact = layers.Dense(16, activation='relu', name='graph_spatial_projection')(graph_feature)
     graph_spatial = BroadcastGraph(name='graph_spatial')([cnn_feature, graph_compact])
-    fused = layers.Concatenate(name='spatial_graph_fusion')([cnn_feature, graph_spatial])
+    client_spatial = SpatialClientAttention(name='client_spatial_attention')(
+        [cnn_feature, g, node_input, node_mask_input])
+    ap_spatial = SpatialAPAttention(name='ap_spatial_attention')(
+        [cnn_feature, g, node_input, node_mask_input, adjacency_input])
+    fused = layers.Concatenate(name='spatial_graph_fusion')(
+        [cnn_feature, graph_spatial, client_spatial, ap_spatial])
     fused = layers.Conv2D(32, 3, padding='same', activation='relu', name='fused_features')(fused)
 
     logits = layers.Conv2D(1, 1, padding='same')(fused)
@@ -49,8 +56,8 @@ def build_network(cnn_channels=6, node_features=13):
     v = layers.Dense(64, activation='relu')(v)
     critic = layers.Dense(1, name='critic')(v)
     return models.Model([map_input, node_input, adjacency_input, node_mask_input], [actor, critic],
-                        name='GNN_CNN_multiscale_actor_critic')
+                        name='GNN_CNN_client_ap_attention_actor_critic')
 
 if __name__ == "__main__":
-    model = build_network(6,13)
+    model = build_network()
     model.summary()

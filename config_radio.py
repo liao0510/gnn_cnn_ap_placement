@@ -1,7 +1,8 @@
-"""Noise-limited HE access and AP peering; constant power spectral density.
+"""Reference-SNR AP mesh and full-band co-channel SINR downlink access.
 
-Inter-AP interference and inter-AP traffic scheduling are outside this model.
-OFDMA uses equal-size, nonoverlapping RUs and round robin when oversubscribed.
+All deployed APs are always-on interferers, even outside the serving mesh or
+without associated clients. Flat fading / constant PSD keeps reference SINR
+unchanged across RUs. No inter-AP traffic, CSMA, packet or RU-position simulation.
 """
 from dataclasses import dataclass
 import math
@@ -11,7 +12,8 @@ ACCESS_BANDWIDTH_MHZ = 80
 TX_POWER_DBM = 20.0
 NOISE_FIGURE_DB = 7.0
 MESH_SNR_THRESHOLD_DB = 4.0
-CLIENT_SNR_THRESHOLD_DB = 4.0
+CLIENT_SINR_THRESHOLD_DB = 4.0
+ACCESS_INTERFERENCE_MODEL = 'full_band_all_aps_always_on'
 COVERAGE_THRESHOLD_DBM = -60.0
 GRID_SIZE_METERS = 0.1
 MAC_EFFICIENCY = 0.7
@@ -25,7 +27,8 @@ class ChannelConfig:
     bandwidth_mhz: int = ACCESS_BANDWIDTH_MHZ
     noise_figure_db: float = NOISE_FIGURE_DB
     mesh_snr_threshold_db: float = MESH_SNR_THRESHOLD_DB
-    client_snr_threshold_db: float = CLIENT_SNR_THRESHOLD_DB
+    client_sinr_threshold_db: float = CLIENT_SINR_THRESHOLD_DB
+    access_interference_model: str = ACCESS_INTERFERENCE_MODEL
     spatial_streams: int = SPATIAL_STREAMS
     guard_interval_us: float = GUARD_INTERVAL_US
 
@@ -37,8 +40,10 @@ class ChannelConfig:
         if not isinstance(self.spatial_streams, int) or not 1 <= self.spatial_streams <= 8:
             raise ValueError('spatial_streams must be an integer from 1 to 8')
         if not all(math.isfinite(v) for v in (self.noise_figure_db,
-                   self.mesh_snr_threshold_db, self.client_snr_threshold_db)):
-            raise ValueError('Noise figure and SNR thresholds must be finite')
+                   self.mesh_snr_threshold_db, self.client_sinr_threshold_db)):
+            raise ValueError('Noise figure, mesh SNR and client SINR thresholds must be finite')
+        if self.access_interference_model != 'full_band_all_aps_always_on':
+            raise ValueError('Unsupported access interference model')
 
 
 def snapshot():
@@ -52,6 +57,7 @@ def channel_config(settings=None):
     return ChannelConfig(bandwidth_mhz=values['ACCESS_BANDWIDTH_MHZ'],
                          noise_figure_db=values['NOISE_FIGURE_DB'],
                          mesh_snr_threshold_db=values['MESH_SNR_THRESHOLD_DB'],
-                         client_snr_threshold_db=values['CLIENT_SNR_THRESHOLD_DB'],
+                         client_sinr_threshold_db=values['CLIENT_SINR_THRESHOLD_DB'],
+                         access_interference_model=values['ACCESS_INTERFERENCE_MODEL'],
                          spatial_streams=values['SPATIAL_STREAMS'],
                          guard_interval_us=values['GUARD_INTERVAL_US'])

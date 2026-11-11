@@ -1,4 +1,4 @@
-"""Shared AP mesh, strongest-SNR association, and OFDMA evaluation."""
+"""Reference-SNR mesh, full-band strongest-SINR association and OFDMA."""
 import numpy as np
 import config_radio as radio
 from method.Cal_SNR import as_numpy, build_ap_mesh, inspect_client_links
@@ -12,12 +12,19 @@ def run_network_environment(ap_positions, client_positions, client_demands, rssi
     if len(client_positions) != len(client_demands):
         raise ValueError('Client positions and demands must align')
     maps = [as_numpy(signal) for signal in rssi_maps]
-    mesh = build_ap_mesh(ap_positions, maps, cfg)
-    links, associated, snrs = inspect_client_links(client_positions, ap_positions, maps,
+    # Preserve the preexisting AP-AP reference-SNR values while access uses
+    # unfloored physical powers, including signals below -100 dBm.
+    mesh = build_ap_mesh(ap_positions, [np.clip(m, -100., -20.) for m in maps], cfg)
+    links, associated, sinrs = inspect_client_links(client_positions, ap_positions, maps,
                                                   mesh['in_mesh'], cfg)
-    allocations, ap_resources = allocate_throughput(client_demands, associated, snrs,
+    allocations, ap_resources = allocate_throughput(client_demands, associated, sinrs,
                                                    len(ap_positions), cfg,
                                                    mac_efficiency=mac_efficiency)
+    for row, inspected in zip(allocations, links):
+        selected = inspected['links'][row['ap']] if row['ap'] >= 0 else None
+        for key in ('rssi_dbm', 'interference_mw', 'interference_dbm', 'noise_dbm',
+                    'noise_interference_dbm'):
+            row[key] = selected[key] if selected is not None else None
     reference = calculate_link_capacity(37.0, mac_efficiency,
                                        bandwidth_mhz=cfg.bandwidth_mhz,
                                        spatial_streams=cfg.spatial_streams,
@@ -26,7 +33,8 @@ def run_network_environment(ap_positions, client_positions, client_demands, rssi
                'mean_satisfaction': float(np.mean([r['satisfaction_ratio'] for r in allocations])) if allocations else 0.0,
                'demand_met_ratio': float(np.mean([r['demand_met'] for r in allocations])) if allocations else 0.0,
                'associated_clients': sum(ap >= 0 for ap in associated)}
-    return dict(mesh, client_links=links, connected_AP=associated, connected_AP_SNR=snrs,
+    return dict(mesh, client_links=links, connected_AP=associated, connected_AP_SINR=sinrs,
+                access_interference_model=cfg.access_interference_model,
                 client_capacities=[r['access_capacity_mbps'] for r in allocations],
                 allocation_results=allocations, ap_resources=ap_resources,
                 rate_reference_mbps=max(reference, 1.0),

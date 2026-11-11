@@ -103,7 +103,7 @@ def build_spatial_encoder(map_input):
                                  name=f'cnn_decoder{level}_project')(features)
         detail = [features, skips[level]]
         if level == 0:
-            # These six raw channels keep a one-cell client / thin wall at its
+            # The raw channels keep a one-cell client / thin wall at its
             # original coordinate instead of relying on pooled reconstruction.
             detail.append(map_input)
         features = layers.Concatenate(name=f'cnn_decoder{level}_skip')(detail)

@@ -81,7 +81,10 @@ class Cal_db_gpu:
             meters=cp.maximum(dist*self.grid_size,0.5)
             fspl=32.44+20*cp.log10(frequency_mhz)+20*cp.log10(meters/1000.)
             attenuation=self._path_attenuation(ax,ay,gx,gy,dist)
-            rssi=cp.clip(self.tx_power-fspl-attenuation,-100.,-20.)
+            # Preserve physical powers for access interference: lifting a weak
+            # signal to -100 dBm would invent interference. Display / neural
+            # normalization clamps independently; the mesh keeps its old range.
+            rssi=self.tx_power-fspl-attenuation
             result[start:stop]=cp.where(self.walls[start:stop]>0,cp.nan,cp.round(rssi,2))
         valid=cp.isfinite(result)
         average=cp.mean(result[valid]) if bool(cp.any(valid)) else -100.

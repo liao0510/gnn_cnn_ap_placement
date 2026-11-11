@@ -1,1 +1,1 @@
-"""Shared propagation, SNR and OFDMA utilities for every placement workflow."""
+"""Shared propagation, AP-AP SNR, AP-client SINR and OFDMA utilities."""
